@@ -1,0 +1,200 @@
+//Viral Science
+// www.youtube.com/c/viralscience
+//Google Assistant Home Automation
+#include <ESP8266WiFi.h>
+#include "Adafruit_MQTT.h"
+#include "Adafruit_MQTT_Client.h"
+#include <Servo.h>
+
+
+#define WLAN_SSID       "Mazher.."             // Your SSID
+#define WLAN_PASS       "39874492"        // Your password
+#define BUZZER_PIN D1
+//gas 
+String MakerIFTTT_Key ;
+;String MakerIFTTT_Event;
+char *append_str(char *here, String s) {  int i=0; while (*here++ = s[i]){i++;};return here-1;}
+char *append_ul(char *here, unsigned long u) { char buf[20]; return append_str(here, ultoa(u, buf, 10));}
+char post_rqst[256];char *p;char *content_length_here;char *json_start;int compi;
+
+int Gas_pin = 4; 
+
+/************************* Adafruit.io Setup *********************************/
+
+#define AIO_SERVER      "io.adafruit.com" //Adafruit Server
+#define AIO_SERVERPORT  1883                   
+//#define AIO_USERNAME    "   ----   "            // Username
+//#define AIO_KEY         "       -----      "   // Auth Key
+#define AIO_USERNAME  "GradProject"
+#define AIO_KEY       "f953852789604be2925d46cd3794d5de"
+
+//WIFI CLIENT
+WiFiClient client;
+
+Adafruit_MQTT_Client mqtt(&client, AIO_SERVER, AIO_SERVERPORT, AIO_USERNAME, AIO_KEY);
+
+Adafruit_MQTT_Subscribe window = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/window");
+Adafruit_MQTT_Subscribe garage = Adafruit_MQTT_Subscribe(&mqtt, AIO_USERNAME "/feeds/garage");
+//Adafruit_MQTT_Publish Gas = Adafruit_MQTT_Publish(&mqtt, AIO_USERNAME "/feeds/gas-leakage-detection");
+
+Servo servo ; 
+Servo servo2 ;
+
+
+void MQTT_connect();
+
+void setup() {
+  Serial.begin(115200);
+  servo.attach(2);  //D4  -- 4 if D2 
+  servo.write(180);
+  delay(2000);
+  servo2.attach(0);  //D4  -- 4 if D2 
+  servo2.write(90);
+  delay(2000);
+
+  pinMode(BUILTIN_LED, OUTPUT);
+  digitalWrite(BUILTIN_LED, HIGH);
+  pinMode(Gas_pin,INPUT);
+  
+  // Connect to WiFi access point.
+  Serial.println(); Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(WLAN_SSID);
+
+  WiFi.begin(WLAN_SSID, WLAN_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println();
+
+  Serial.println("WiFi connected");
+  Serial.println("IP address: "); 
+  Serial.println(WiFi.localIP());
+ 
+  mqtt.subscribe(&garage);
+  mqtt.subscribe(&window);
+  //mqtt.subscribe(&Light2);
+  //mqtt.subscribe(&Light4);
+}
+
+void loop() {
+ 
+  MQTT_connect();
+  
+
+  Adafruit_MQTT_Subscribe *subscription;
+  while ((subscription = mqtt.readSubscription(20000))) {
+    if (subscription == &garage) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)garage.lastread);
+      int garage_State = atoi((char *)garage.lastread);
+      //digitalWrite(5, Light1_State);
+      if(garage_State == 1) {
+        servo.write(0);
+        delay(1000);
+        }
+      else
+      {
+        servo.write(180);
+        delay(1000);
+        }
+      
+    }
+    if (subscription == &window) {
+      Serial.print(F("Got: "));
+      Serial.println((char *)window.lastread);
+      int window_State = atoi((char *)window.lastread);
+      //digitalWrite(5, Light1_State);
+      if(window_State == 1) {
+        servo2.write(270);
+        delay(1000);
+        }
+      else
+      {
+        servo2.write(90);
+        delay(1000);
+        }
+      
+    }
+
+  }
+
+    int Gas_state = digitalRead(Gas_pin);
+
+   if (Gas_state == LOW)
+   {
+    playTune(BUZZER_PIN,2000,200);
+    if (client.connect("maker.ifttt.com",80)) {
+    MakerIFTTT_Key ="hzVqMK0eo8wbbA8kE8Dk5hIV_MfrIcevmkEq4pU8of4";
+    MakerIFTTT_Event ="email";
+    p = post_rqst;
+    p = append_str(p, "POST /trigger/");
+    p = append_str(p, MakerIFTTT_Event);
+    p = append_str(p, "/with/key/");
+    p = append_str(p, MakerIFTTT_Key);
+    p = append_str(p, " HTTP/1.1\r\n");
+    p = append_str(p, "Host: maker.ifttt.com\r\n");
+    p = append_str(p, "Content-Type: application/json\r\n");
+    p = append_str(p, "Content-Length: ");
+    content_length_here = p;
+    p = append_str(p, "NN\r\n");
+    p = append_str(p, "\r\n");
+    json_start = p;
+    p = append_str(p, "{\"value1\":\"");
+    p = append_str(p, "Nodemcu");
+    p = append_str(p, "\",\"value2\":\"");
+    p = append_str(p, "Hi Azza.........Emergency!!!");
+    p = append_str(p, "\",\"value3\":\"");
+    p = append_str(p, "Gas leakage is detected.");
+    p = append_str(p, "\"}");
+
+    compi= strlen(json_start);
+    content_length_here[0] = '0' + (compi/10);
+    content_length_here[1] = '0' + (compi%10);
+    client.print(post_rqst);
+
+  }
+  Serial.println("Your message send...............");
+  Serial.println("Gas leakage is detected");
+  delay(5000);
+  }
+
+   else 
+   {
+    Serial.println("No gas");
+   }
+  
+}
+
+void playTune(int _pin,int _frequency,int _length){
+analogWriteFreq(_frequency);
+analogWrite(_pin,512);
+delay(_length);
+analogWrite(_pin,0);
+}
+  
+void MQTT_connect() {
+  int8_t ret;
+
+  if (mqtt.connected()) {
+    return;
+  }
+
+  Serial.print("Connecting to MQTT... ");
+
+  uint8_t retries = 3;
+  
+  while ((ret = mqtt.connect()) != 0) {
+    Serial.println(mqtt.connectErrorString(ret));
+    Serial.println("Retrying MQTT connection in 5 seconds...");
+    mqtt.disconnect();
+    delay(5000); 
+    retries--;
+    if (retries == 0) {
+      while (1);
+    }
+  }
+  Serial.println("MQTT Connected!");
+  
+}
